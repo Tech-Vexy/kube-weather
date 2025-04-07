@@ -12,7 +12,7 @@ const provider = new k8s.Provider("microk8s", {
 // Create a namespace for the weather app
 const namespace = new k8s.core.v1.Namespace("kube-weather", {
     metadata: { name: "kube-weather" }
-}, { provider, dependsOn: [ngrokController] });
+}, { provider });
 
 // Create a ConfigMap for the HTML content
 const configMap = new k8s.core.v1.ConfigMap("kube-weather-config", {
@@ -68,20 +68,12 @@ const service = new k8s.core.v1.Service("kube-weather", {
     }
 }, { provider });
 
-// Install the ngrok-operator CRDs using Pulumi
-const ngrokCrds = new k8s.yaml.ConfigFile("ngrok-crds", {
-    file: "https://github.com/ngrok/kubernetes-ingress-controller/releases/latest/download/crds.yaml",
-}, { provider });
+// Install the ngrok-operator CRD
+// First, install the ngrok-operator CRD using kubectl (this should be done manually before applying the Pulumi code)
+// kubectl apply -f https://github.com/ngrok/kubernetes-ingress-controller/releases/latest/download/crds.yaml
+// kubectl apply -f https://github.com/ngrok/kubernetes-ingress-controller/releases/latest/download/manifests.yaml
 
-// Install the ngrok-operator controller
-const ngrokController = new k8s.yaml.ConfigFile("ngrok-controller", {
-    file: "https://github.com/ngrok/kubernetes-ingress-controller/releases/latest/download/manifests.yaml",
-    transformations: [(obj) => {
-        // You can add transformations here if needed
-    }],
-}, { provider, dependsOn: [ngrokCrds] });
-
-// Create ngrok tunnel (with explicit dependency on the controller installation)
+// Create ngrok tunnel
 const ngrokTunnel = new k8s.apiextensions.CustomResource("kube-weather-tunnel", {
     apiVersion: "ingress.k8s.ngrok.com/v1alpha1",
     kind: "NgrokTunnel",
@@ -130,9 +122,6 @@ export const ngrokTunnelName = ngrokTunnel.metadata.name;
 export const serviceName = service.metadata.name;
 export const namespaceName = namespace.metadata.name;
 
-// Export instructions for getting the URL
-export const getUrlCommand = pulumi.interpolate`kubectl get ngroktunnels -n ${namespace.metadata.name} ${ngrokTunnel.metadata.name} -o jsonpath='{.status.urls[0]}'`;
-
 // Instructions for setting up and deploying:
 // 1. Set the ngrok auth token as a secret in Pulumi config:
 //    pulumi config set --secret ngrokAuthToken <your-ngrok-auth-token>
@@ -141,4 +130,4 @@ export const getUrlCommand = pulumi.interpolate`kubectl get ngroktunnels -n ${na
 //    pulumi up
 //
 // 3. Get the URL after deployment:
-//    kubectl get ngroktunnels -n kube-weather kube-weather-tunnel -o jsonpath='{.status.urls[0]}'
+//    kubectl get ngrok -n kube-weather kube-weather-tunnel -o jsonpath='{.status.url}'
